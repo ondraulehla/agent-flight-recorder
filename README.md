@@ -6,12 +6,11 @@ Agents are non-deterministic: the same prompt can take a different execution pat
 
 ## Status
 
-Week 1 scope (current): single task, single sandbox, full trace to JSONL, assertions, metrics.
+Current: tasks with assertions, full trace to JSONL, parallel N runs with a pass-rate / flakiness / cost-per-success report, and trajectory diff (first tool call where two runs diverged). When a batch has both passing and failing runs, the divergence between them is shown automatically.
 
 Roadmap:
-- [ ] Parallel N runs, pass-rate / flakiness / cost-per-success report
-- [ ] Trace diff: first tool call where two runs diverged
 - [ ] Custom E2B template with the agent preinstalled (faster cold starts)
+- [ ] Record rate-limit events into run metrics
 
 ## How it works
 
@@ -37,8 +36,12 @@ Fill in `.env`:
 ## Usage
 
 ```bash
-uv run flightrec run tasks/hello-world.yaml        # one recorded run
-uv run flightrec run tasks/hello-world.yaml -n 5   # five runs, pass-rate summary
+uv run flightrec run tasks/hello-world.yaml        # one recorded run, events streamed live
+uv run flightrec run tasks/hello-world.yaml -n 5   # five parallel runs, flakiness summary
+uv run flightrec run tasks/hello-world.yaml -n 8 -j 2   # limit sandbox concurrency
+
+# where did two runs take a different path?
+uv run flightrec diff runs/hello-world/<run-a>/trace.jsonl runs/hello-world/<run-b>/trace.jsonl
 ```
 
 Example task:
