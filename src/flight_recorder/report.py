@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 import statistics
+from pathlib import Path
 
 from pydantic import BaseModel
 
 from flight_recorder.models import RunResult
+
+
+def load_results(runs_dir: Path, task_id: str) -> list[RunResult]:
+    """Load all persisted result.json files for a task, oldest first."""
+    result_files = sorted(
+        (runs_dir / task_id).glob("*/result.json"), key=lambda p: p.stat().st_mtime
+    )
+    return [RunResult.model_validate_json(p.read_text(encoding="utf-8")) for p in result_files]
 
 
 class Aggregate(BaseModel):

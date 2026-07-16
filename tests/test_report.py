@@ -61,3 +61,18 @@ def test_stdev_needs_two_durations():
 def test_empty_results_rejected():
     with pytest.raises(ValueError):
         aggregate([])
+
+
+def test_load_results_from_disk(tmp_path):
+    from flight_recorder.report import load_results
+
+    for run_id, passed in (("aaa", True), ("bbb", False)):
+        run_dir = tmp_path / "mytask" / run_id
+        run_dir.mkdir(parents=True)
+        (run_dir / "result.json").write_text(
+            _result(passed).model_copy(update={"run_id": run_id}).model_dump_json()
+        )
+
+    results = load_results(tmp_path, "mytask")
+    assert {r.run_id for r in results} == {"aaa", "bbb"}
+    assert load_results(tmp_path, "unknown-task") == []

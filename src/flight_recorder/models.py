@@ -34,10 +34,19 @@ Assertion = Annotated[
 ]
 
 
+class SetupFile(BaseModel):
+    """A file written into the workspace before the agent starts."""
+
+    path: str
+    content: str
+
+
 class TaskSpec(BaseModel):
     id: str
     prompt: str
     assertions: list[Assertion] = []
+    setup_files: list[SetupFile] = []
+    setup_commands: list[str] = []
     template: str = "base"
     timeout_s: int = 600
 

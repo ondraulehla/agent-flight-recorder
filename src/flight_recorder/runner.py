@@ -100,6 +100,10 @@ def run_task(
     try:
         _ensure_claude(sandbox)
         sandbox.commands.run(f"mkdir -p {WORKSPACE}")
+        for file in task.setup_files:
+            sandbox.files.write(f"{WORKSPACE}/{file.path}", file.content)
+        for setup_command in task.setup_commands:
+            sandbox.commands.run(setup_command, cwd=WORKSPACE, timeout=120)
 
         with open(trace_path, "w", encoding="utf-8") as trace_file:
 

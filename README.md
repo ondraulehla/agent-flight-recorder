@@ -8,9 +8,11 @@ Agents are non-deterministic: the same prompt can take a different execution pat
 
 Current: tasks with assertions, full trace to JSONL, parallel N runs with a pass-rate / flakiness / cost-per-success report, and trajectory diff (first tool call where two runs diverged). When a batch has both passing and failing runs, the divergence between them is shown automatically.
 
+Tasks can ship setup fixtures (files and commands prepared in the workspace before the agent starts), so you can record realistic scenarios like "fix the bug so the tests pass" – see [tasks/fix-median-bug.yaml](tasks/fix-median-bug.yaml).
+
 Roadmap:
-- [ ] Custom E2B template with the agent preinstalled (faster cold starts)
 - [ ] Record rate-limit events into run metrics
+- [ ] Compare pass rate / cost across models
 
 ## How it works
 
@@ -40,9 +42,17 @@ uv run flightrec run tasks/hello-world.yaml        # one recorded run, events st
 uv run flightrec run tasks/hello-world.yaml -n 5   # five parallel runs, flakiness summary
 uv run flightrec run tasks/hello-world.yaml -n 8 -j 2   # limit sandbox concurrency
 
+# build the E2B template with the agent preinstalled (once; fast cold starts)
+uv run flightrec build-template
+
+# aggregate every recorded run of a task, across sessions
+uv run flightrec report hello-world
+
 # where did two runs take a different path?
 uv run flightrec diff runs/hello-world/<run-a>/trace.jsonl runs/hello-world/<run-b>/trace.jsonl
 ```
+
+Tasks reference the prebuilt template via `template: flight-recorder`; set `template: base` to run without building one (the runner then installs the agent at sandbox startup, which is slower).
 
 Example task:
 

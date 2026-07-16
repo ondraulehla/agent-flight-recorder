@@ -11,6 +11,11 @@ assertions:
     path: out.txt
   - kind: command_succeeds
     command: grep -q done out.txt
+setup_files:
+  - path: data.csv
+    content: "a,b\\n1,2\\n"
+setup_commands:
+  - md5sum data.csv > .checksum
 timeout_s: 120
 """
 
@@ -23,6 +28,9 @@ def test_task_from_yaml(tmp_path):
     assert task.timeout_s == 120
     assert isinstance(task.assertions[0], FileExists)
     assert isinstance(task.assertions[1], CommandSucceeds)
+    assert task.setup_files[0].path == "data.csv"
+    assert task.setup_files[0].content == "a,b\n1,2\n"
+    assert task.setup_commands == ["md5sum data.csv > .checksum"]
 
 
 def test_defaults():

@@ -7,4 +7,5 @@ assertions:
     path: hello.txt
   - kind: command_succeeds
     command: grep -qx "Hello from the sandbox!" hello.txt
+template: flight-recorder
 timeout_s: 300

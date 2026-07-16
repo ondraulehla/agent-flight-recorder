@@ -11,7 +11,7 @@ from rich.table import Table
 
 from flight_recorder.diff import first_divergence, render_divergence, steps_from_trace
 from flight_recorder.models import RunResult, TaskSpec, TraceEvent
-from flight_recorder.report import aggregate
+from flight_recorder.report import aggregate, load_results
 from flight_recorder.runner import run_task
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -133,6 +133,33 @@ def run(
 
     all_passed = not crashes and all(r.passed for r in results)
     raise typer.Exit(code=0 if all_passed else 1)
+
+
+@app.command()
+def report(
+    task_id: Annotated[str, typer.Argument(help="Task id (directory name under runs/)")],
+    out: Annotated[Path, typer.Option("--out", "-o", help="Runs directory")] = Path("runs"),
+) -> None:
+    """Aggregate all recorded runs of a task, across sessions."""
+    results = load_results(out, task_id)
+    if not results:
+        console.print(f"[red]no recorded runs for '{task_id}' in {out}/[/red]")
+        raise typer.Exit(code=1)
+    _print_summary(results)
+    _print_pass_fail_divergence(results)
+
+
+@app.command()
+def build_template(
+    cpu_count: Annotated[int, typer.Option(min=1)] = 1,
+    memory_mb: Annotated[int, typer.Option(min=512)] = 1024,
+) -> None:
+    """Build the E2B template with the agent preinstalled (fast cold starts)."""
+    load_dotenv()
+    from flight_recorder.template import build_template as build
+
+    name = build(cpu_count=cpu_count, memory_mb=memory_mb)
+    console.print(f"[green]template '{name}' built[/green] – use `template: {name}` in tasks")
 
 
 @app.command()

@@ -1,0 +1,55 @@
+id: fix-median-bug
+prompt: |
+  The workspace contains stats.py and its test suite test_stats.py.
+  Running `python3 test_stats.py` currently fails.
+  Find and fix the bug(s) in stats.py so that the whole test suite passes.
+  Do not modify test_stats.py.
+setup_files:
+  - path: stats.py
+    content: |
+      def mean(values):
+          return sum(values) / len(values)
+
+
+      def median(values):
+          ordered = sorted(values)
+          n = len(ordered)
+          mid = n // 2
+          if n % 2 == 1:
+              return ordered[mid]
+          return (ordered[mid] + ordered[mid + 1]) / 2
+  - path: test_stats.py
+    content: |
+      import unittest
+
+      from stats import mean, median
+
+
+      class TestStats(unittest.TestCase):
+          def test_mean(self):
+              self.assertEqual(mean([1, 2, 3]), 2)
+
+          def test_mean_empty_is_zero(self):
+              self.assertEqual(mean([]), 0.0)
+
+          def test_median_odd(self):
+              self.assertEqual(median([3, 1, 2]), 2)
+
+          def test_median_even(self):
+              self.assertEqual(median([1, 2, 3, 4]), 2.5)
+
+          def test_median_two(self):
+              self.assertEqual(median([10, 20]), 15.0)
+
+
+      if __name__ == "__main__":
+          unittest.main()
+setup_commands:
+  - md5sum test_stats.py > .test-checksum
+assertions:
+  - kind: command_succeeds
+    command: python3 test_stats.py
+  - kind: command_succeeds
+    command: md5sum -c .test-checksum
+template: flight-recorder
+timeout_s: 420
