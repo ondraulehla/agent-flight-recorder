@@ -1,0 +1,67 @@
+id: semver-precedence
+prompt: |
+  The workspace contains test_semver.py. Implement semver.py with a function
+  compare(a, b) that returns -1, 0 or 1 according to semantic versioning
+  precedence rules (semver.org spec item 11), so that `python3 test_semver.py`
+  passes. Use only the Python standard library. Do not modify test_semver.py.
+setup_files:
+  - path: test_semver.py
+    content: |
+      import unittest
+
+      from semver import compare
+
+
+      class TestSemverPrecedence(unittest.TestCase):
+          # the official precedence chain from the semver spec, item 11
+          CHAIN = [
+              "1.0.0-alpha",
+              "1.0.0-alpha.1",
+              "1.0.0-alpha.beta",
+              "1.0.0-beta",
+              "1.0.0-beta.2",
+              "1.0.0-beta.11",
+              "1.0.0-rc.1",
+              "1.0.0",
+          ]
+
+          def test_spec_chain_is_strictly_increasing(self):
+              for earlier, later in zip(self.CHAIN, self.CHAIN[1:]):
+                  self.assertEqual(compare(earlier, later), -1, f"{earlier} < {later}")
+                  self.assertEqual(compare(later, earlier), 1, f"{later} > {earlier}")
+
+          def test_core_versions(self):
+              self.assertEqual(compare("1.0.0", "2.0.0"), -1)
+              self.assertEqual(compare("2.1.0", "2.0.9"), 1)
+              self.assertEqual(compare("2.10.0", "2.9.0"), 1)  # numeric, not lexical
+
+          def test_equality(self):
+              self.assertEqual(compare("1.2.3", "1.2.3"), 0)
+              self.assertEqual(compare("1.0.0-alpha.1", "1.0.0-alpha.1"), 0)
+
+          def test_build_metadata_is_ignored(self):
+              self.assertEqual(compare("1.0.0+build.1", "1.0.0+build.999"), 0)
+              self.assertEqual(compare("1.0.0-alpha+001", "1.0.0-alpha"), 0)
+
+          def test_numeric_identifiers_compare_numerically(self):
+              self.assertEqual(compare("1.0.0-alpha.9", "1.0.0-alpha.10"), -1)
+
+          def test_numeric_lower_than_alphanumeric(self):
+              self.assertEqual(compare("1.0.0-1", "1.0.0-a"), -1)
+              self.assertEqual(compare("1.0.0-999", "1.0.0-a"), -1)
+
+          def test_shorter_prerelease_set_wins_when_prefix(self):
+              self.assertEqual(compare("1.0.0-alpha", "1.0.0-alpha.0"), -1)
+
+
+      if __name__ == "__main__":
+          unittest.main()
+setup_commands:
+  - md5sum test_semver.py > .test-checksum
+assertions:
+  - kind: command_succeeds
+    command: python3 test_semver.py
+  - kind: command_succeeds
+    command: md5sum -c .test-checksum
+template: flight-recorder
+timeout_s: 420

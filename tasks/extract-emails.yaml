@@ -1,0 +1,22 @@
+# A deliberately underspecified task with a strict hidden acceptance check.
+# The agent cannot run the acceptance test itself, so ambiguous decisions
+# (is foo@bar valid? how to handle trailing punctuation?) surface as flakiness.
+id: extract-emails
+prompt: |
+  The workspace contains input.txt with messy text. Extract all valid email
+  addresses into emails.txt: one address per line, deduplicated, sorted
+  alphabetically. Include only addresses with a valid domain.
+setup_files:
+  - path: input.txt
+    content: |
+      Contact us: John Doe <john.doe@example.com> or via the form.
+      URGENT escalations go to SUPPORT@EXAMPLE.COM only.
+      Jane's backup address is jane+backup@mail.example.org, obviously.
+      Broken entries: foo@bar and also @nowhere and double@@fail.com.
+      Old address bob@site.io. still works. New one: bob@site.io (the same!)
+      billing: accounts@pay.example.co.uk;
+assertions:
+  - kind: command_succeeds
+    command: printf 'accounts@pay.example.co.uk\nbob@site.io\njane+backup@mail.example.org\njohn.doe@example.com\nSUPPORT@EXAMPLE.COM\n' | diff - emails.txt
+template: flight-recorder
+timeout_s: 300
