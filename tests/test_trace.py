@@ -116,3 +116,25 @@ class TestMetricsAndResult:
         error_result = {**RESULT, "subtype": "error_max_turns"}
         _, errored = final_result_text(_events(error_result))
         assert errored is True
+
+
+def _rate_limit(status: str) -> dict:
+    return {"type": "rate_limit_event", "rate_limit_info": {"status": status, "resetsAt": 1}}
+
+
+class TestRateLimit:
+    def test_event_gets_readable_summary(self):
+        (event,) = events_from_message(_rate_limit("allowed_warning"), start_seq=0)
+        assert event.kind == "other"
+        assert event.summary == "rate limit: allowed_warning"
+
+    def test_no_events_means_none(self):
+        assert extract_metrics(_events(INIT, RESULT)).rate_limit_status is None
+
+    def test_worst_status_wins(self):
+        events = _events(_rate_limit("allowed"), _rate_limit("rejected"), _rate_limit("allowed"))
+        assert extract_metrics(events).rate_limit_status == "rejected"
+
+    def test_all_allowed(self):
+        events = _events(_rate_limit("allowed"), _rate_limit("allowed"))
+        assert extract_metrics(events).rate_limit_status == "allowed"

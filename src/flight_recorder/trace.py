@@ -86,14 +86,36 @@ def events_from_message(msg: dict[str, Any], start_seq: int) -> list[TraceEvent]
                 add("tool_result", str(content or ""))
     elif msg_type == "result":
         add("result", f"{msg.get('subtype', 'unknown')}: {msg.get('result', '')}")
+    elif msg_type == "rate_limit_event":
+        status = msg.get("rate_limit_info", {}).get("status", "?")
+        add("other", f"rate limit: {status}")
     else:
         add("other", str(msg_type))
     return events
 
 
+_RATE_LIMIT_SEVERITY = {"allowed": 0, "allowed_warning": 1, "queued": 2, "rejected": 3}
+
+
+def worst_rate_limit_status(events: list[TraceEvent]) -> str | None:
+    """Most severe rate-limit status seen during the run, None if none reported."""
+    statuses = [
+        e.raw.get("rate_limit_info", {}).get("status")
+        for e in events
+        if e.raw.get("type") == "rate_limit_event"
+    ]
+    statuses = [s for s in statuses if s]
+    if not statuses:
+        return None
+    return max(statuses, key=lambda s: _RATE_LIMIT_SEVERITY.get(s, 99))
+
+
 def extract_metrics(events: list[TraceEvent]) -> RunMetrics:
     """Pull run metrics from the final `result` message, plus tool-call count."""
-    metrics = RunMetrics(tool_calls=sum(1 for e in events if e.kind == "tool_use"))
+    metrics = RunMetrics(
+        tool_calls=sum(1 for e in events if e.kind == "tool_use"),
+        rate_limit_status=worst_rate_limit_status(events),
+    )
     result = next((e.raw for e in reversed(events) if e.kind == "result"), None)
     if result is None:
         return metrics

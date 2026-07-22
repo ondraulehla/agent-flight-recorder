@@ -10,8 +10,9 @@ Current: tasks with assertions, full trace to JSONL, parallel N runs with a pass
 
 Tasks can ship setup fixtures (files and commands prepared in the workspace before the agent starts), so you can record realistic scenarios like "fix the bug so the tests pass" – see [tasks/fix-median-bug.yaml](tasks/fix-median-bug.yaml).
 
+Rate-limit events from the stream are recorded too: each run stores the most severe status seen (`allowed` / `allowed_warning` / `rejected`), and the batch summary warns when any run was throttled – so a slow batch is distinguishable from a throttled one.
+
 Roadmap:
-- [ ] Record rate-limit events into run metrics
 - [ ] HTML report with embedded trace viewer
 
 ## Demo

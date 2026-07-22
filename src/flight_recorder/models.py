@@ -72,6 +72,7 @@ class RunMetrics(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None
     tool_calls: int = 0
+    rate_limit_status: str | None = None
 
 
 class AssertionResult(BaseModel):

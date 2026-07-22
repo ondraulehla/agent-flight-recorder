@@ -86,6 +86,14 @@ def _print_summary(results: list[RunResult]) -> None:
         parts.append(f"cost per success ${agg.cost_per_success_usd:.4f}")
     console.print("  " + "  ·  ".join(parts))
 
+    throttled = {
+        r.metrics.rate_limit_status
+        for r in results
+        if r.metrics.rate_limit_status not in (None, "allowed")
+    }
+    if throttled:
+        console.print(f"  [yellow]rate limit: {', '.join(sorted(throttled))}[/yellow]")
+
 
 def _print_pass_fail_divergence(results: list[RunResult]) -> None:
     """When runs disagree, show where a passing and a failing trajectory split."""
