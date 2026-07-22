@@ -12,7 +12,7 @@ Tasks can ship setup fixtures (files and commands prepared in the workspace befo
 
 Roadmap:
 - [ ] Record rate-limit events into run metrics
-- [ ] Compare pass rate / cost across models
+- [ ] HTML report with embedded trace viewer
 
 ## How it works
 
@@ -44,6 +44,9 @@ uv run flightrec run tasks/hello-world.yaml -n 8 -j 2   # limit sandbox concurre
 
 # build the E2B template with the agent preinstalled (once; fast cold starts)
 uv run flightrec build-template
+
+# same task under different models: reliability vs cost trade-off
+uv run flightrec compare tasks/fix-median-bug.yaml -m sonnet -m haiku -n 3
 
 # aggregate every recorded run of a task, across sessions
 uv run flightrec report hello-world

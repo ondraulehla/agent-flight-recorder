@@ -101,26 +101,26 @@ def _print_pass_fail_divergence(results: list[RunResult]) -> None:
         console.print(f"  {line}")
 
 
-@app.command()
-def run(
-    task_file: Annotated[Path, typer.Argument(help="Path to a task YAML file")],
-    runs: Annotated[int, typer.Option("--runs", "-n", min=1, help="How many runs")] = 1,
-    jobs: Annotated[int, typer.Option("--jobs", "-j", min=1, help="Parallel sandboxes")] = 4,
-    out: Annotated[Path, typer.Option("--out", "-o", help="Output directory")] = Path("runs"),
-    quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Do not stream events")] = False,
-) -> None:
-    """Run a task in fresh E2B sandbox(es) and record traces."""
-    load_dotenv()
-    task = TaskSpec.from_yaml(task_file)
-    stream_events = runs == 1 and not quiet
+def _run_batch(
+    task: TaskSpec,
+    out: Path,
+    runs: int,
+    jobs: int,
+    stream_events: bool,
+    model: str | None = None,
+) -> tuple[list[RunResult], int]:
+    """Run a task N times in parallel sandboxes; returns (results, crash count)."""
     results: list[RunResult] = []
     crashes = 0
-
-    console.print(f"[bold]{task.id}[/bold]: {runs} run(s), up to {min(jobs, runs)} in parallel")
+    label = f" model={model}" if model else ""
+    console.print(
+        f"[bold]{task.id}[/bold]:{label} {runs} run(s), up to {min(jobs, runs)} in parallel"
+    )
     with ThreadPoolExecutor(max_workers=min(jobs, runs)) as pool:
         on_event = _print_event if stream_events else None
         futures = [
-            pool.submit(run_task, task, out_dir=out, on_event=on_event) for _ in range(runs)
+            pool.submit(run_task, task, out_dir=out, on_event=on_event, model=model)
+            for _ in range(runs)
         ]
         for future in as_completed(futures):
             try:
@@ -131,15 +131,76 @@ def run(
                 continue
             results.append(result)
             _print_run(result)
-
     if crashes:
         console.print(f"[red]{crashes}/{runs} runs crashed (harness/sandbox error)[/red]")
+    return results, crashes
+
+
+@app.command()
+def run(
+    task_file: Annotated[Path, typer.Argument(help="Path to a task YAML file")],
+    runs: Annotated[int, typer.Option("--runs", "-n", min=1, help="How many runs")] = 1,
+    jobs: Annotated[int, typer.Option("--jobs", "-j", min=1, help="Parallel sandboxes")] = 4,
+    out: Annotated[Path, typer.Option("--out", "-o", help="Output directory")] = Path("runs"),
+    model: Annotated[
+        str, typer.Option("--model", "-m", help="Model for the agent (claude --model)")
+    ] = "",
+    quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Do not stream events")] = False,
+) -> None:
+    """Run a task in fresh E2B sandbox(es) and record traces."""
+    load_dotenv()
+    task = TaskSpec.from_yaml(task_file)
+    results, crashes = _run_batch(
+        task, out, runs, jobs, stream_events=runs == 1 and not quiet, model=model or None
+    )
     if results:
         _print_summary(results)
         _print_pass_fail_divergence(results)
-
     all_passed = not crashes and all(r.passed for r in results)
     raise typer.Exit(code=0 if all_passed else 1)
+
+
+@app.command()
+def compare(
+    task_file: Annotated[Path, typer.Argument(help="Path to a task YAML file")],
+    models: Annotated[
+        list[str],
+        typer.Option("--model", "-m", help="Model to compare (repeat for each)"),
+    ],
+    runs: Annotated[int, typer.Option("--runs", "-n", min=1, help="Runs per model")] = 3,
+    jobs: Annotated[int, typer.Option("--jobs", "-j", min=1, help="Parallel sandboxes")] = 4,
+    out: Annotated[Path, typer.Option("--out", "-o", help="Output directory")] = Path("runs"),
+) -> None:
+    """Run the same task under multiple models and compare reliability and cost."""
+    load_dotenv()
+    task = TaskSpec.from_yaml(task_file)
+    by_model: dict[str, list[RunResult]] = {}
+    for model in models:
+        results, _ = _run_batch(task, out, runs, jobs, stream_events=False, model=model)
+        by_model[model] = results
+
+    table = Table(title=f"{task.id}: {runs} runs per model")
+    for col in ("model", "pass rate", "flaky", "duration", "tool calls", "cost per success"):
+        table.add_column(col)
+    for model, results in by_model.items():
+        if not results:
+            table.add_row(model, "-", "-", "-", "-", "-")
+            continue
+        agg = aggregate(results)
+        duration = f"{agg.mean_duration_ms / 1000:.1f}s" if agg.mean_duration_ms else "?"
+        if agg.stdev_duration_ms is not None:
+            duration += f" ±{agg.stdev_duration_ms / 1000:.1f}s"
+        cost = f"${agg.cost_per_success_usd:.4f}" if agg.cost_per_success_usd else "-"
+        table.add_row(
+            model,
+            f"{agg.passes}/{agg.runs} ({agg.pass_rate:.0%})",
+            "yes" if agg.flaky else "no",
+            duration,
+            f"{agg.mean_tool_calls:.1f}" if agg.mean_tool_calls is not None else "?",
+            cost,
+        )
+    console.print()
+    console.print(table)
 
 
 @app.command()

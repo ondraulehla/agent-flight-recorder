@@ -76,6 +76,7 @@ def run_task(
     out_dir: Path,
     oauth_token: str | None = None,
     on_event: OnEvent | None = None,
+    model: str | None = None,
 ) -> RunResult:
     """Execute `task` once in a fresh sandbox; write trace.jsonl + result.json to `out_dir`."""
     oauth_token = oauth_token or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
@@ -123,6 +124,8 @@ def run_task(
                 f"claude -p {shlex.quote(task.prompt)} "
                 "--output-format stream-json --verbose --dangerously-skip-permissions"
             )
+            if model:
+                command += f" --model {shlex.quote(model)}"
             agent_exit_code = 0
             try:
                 sandbox.commands.run(
@@ -139,10 +142,12 @@ def run_task(
         result_text, agent_errored = final_result_text(events)
         agent_errored = agent_errored or agent_exit_code != 0
         assertion_results = _check_assertions(sandbox, task, result_text)
+        model_used = next((e.raw.get("model") for e in events if e.kind == "init"), None)
         run_result = RunResult(
             task_id=task.id,
             run_id=run_id,
             sandbox_id=sandbox.sandbox_id,
+            model=model_used or model,
             passed=not agent_errored and all(r.passed for r in assertion_results),
             agent_errored=agent_errored,
             result_text=result_text,

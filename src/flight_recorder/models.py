@@ -84,6 +84,7 @@ class RunResult(BaseModel):
     task_id: str
     run_id: str
     sandbox_id: str | None = None
+    model: str | None = None
     passed: bool
     agent_errored: bool = False
     result_text: str = ""
