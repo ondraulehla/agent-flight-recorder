@@ -2,8 +2,11 @@ import json
 
 from flight_recorder.diff import (
     Step,
+    align,
     first_divergence,
+    render_alignment,
     render_divergence,
+    step_similarity,
     steps_from_trace,
 )
 
@@ -83,3 +86,52 @@ def test_one_trajectory_is_prefix_of_other():
     assert div.left is None
     assert div.right is not None
     assert "(no more steps)" in render_divergence(div, "A", "B")[1]
+
+
+def test_fuzzy_match_tolerates_small_input_changes():
+    left = _steps(("Bash", '{"command": "ls -la && python3 test_stats.py 2>&1 | head -60"}'))
+    right = _steps(("Bash", '{"command": "ls -la && python3 test_stats.py 2>&1 | head -80"}'))
+    div = first_divergence(left, right)
+    assert div.index is None  # same action, cosmetic difference
+
+
+def test_different_tools_never_match():
+    assert step_similarity(Step(tool="Bash", detail="{}"), Step(tool="Edit", detail="{}")) == 0.0
+
+
+def test_insertion_in_middle_resyncs():
+    write = ("Write", '{"content": "fixed code", "file_path": "stats.py"}')
+    test = ("Bash", '{"command": "python3 test_stats.py"}')
+    edit = ("Edit", '{"file_path": "stats.py", "new_string": "return 0.0"}')
+    left = _steps(write, test, edit)
+    right = _steps(write, ("Read", '{"file_path": "stats.py"}'), test, edit)
+    ops = align(left, right)
+    assert [op.op for op in ops] == ["match", "right_only", "match", "match"]
+    div = first_divergence(left, right)
+    assert div.index == 1
+    assert div.common == 1
+    assert div.left is None  # nothing unmatched on the left side
+    assert div.right is not None and div.right.tool == "Read"
+
+
+def test_low_similarity_same_tool_does_not_match():
+    left = _steps(("Bash", '{"command": "python3 -m unittest -v 2>&1 | tail -30"}'))
+    right = _steps(("Bash", '{"command": "rm hello.txt"}'))
+    div = first_divergence(left, right)
+    assert div.index == 0
+
+
+def test_render_alignment_symbols():
+    write = ("Write", '{"file_path": "a.txt"}')
+    left = _steps(write, ("Bash", '{"command": "head -60 data"}'), ("Edit", "{}"))
+    right = _steps(write, ("Bash", '{"command": "head -80 data"}'))
+    lines = render_alignment(align(left, right))
+    assert lines[0].startswith(" = Write")
+    assert lines[1].startswith(" ≈ Bash")
+    assert "similar]" in lines[1]
+    assert lines[2].startswith(" - Edit")
+
+
+def test_render_truncates_long_details():
+    step = Step(tool="Write", detail="x" * 500)
+    assert len(step.render()) == 120

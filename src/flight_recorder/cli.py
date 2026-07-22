@@ -9,7 +9,14 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-from flight_recorder.diff import first_divergence, render_divergence, steps_from_trace
+from flight_recorder.diff import (
+    DEFAULT_THRESHOLD,
+    align,
+    first_divergence,
+    render_alignment,
+    render_divergence,
+    steps_from_trace,
+)
 from flight_recorder.models import RunResult, TaskSpec, TraceEvent
 from flight_recorder.report import aggregate, load_results
 from flight_recorder.runner import run_task
@@ -166,13 +173,23 @@ def build_template(
 def diff(
     trace_a: Annotated[Path, typer.Argument(help="First trace.jsonl")],
     trace_b: Annotated[Path, typer.Argument(help="Second trace.jsonl")],
+    threshold: Annotated[
+        float,
+        typer.Option("--threshold", "-t", min=0.0, max=1.0,
+                     help="Similarity needed for two steps to count as the same action"),
+    ] = DEFAULT_THRESHOLD,
 ) -> None:
-    """Show where two recorded trajectories diverged (first differing tool call)."""
+    """Align two recorded trajectories and show where they truly diverged."""
     left, right = steps_from_trace(trace_a), steps_from_trace(trace_b)
-    console.print(f"A: {trace_a} ({len(left)} steps)")
-    console.print(f"B: {trace_b} ({len(right)} steps)")
-    for line in render_divergence(first_divergence(left, right), "A", "B"):
-        console.print(line)
+    console.print(f"A (-): {trace_a} ({len(left)} steps)")
+    console.print(f"B (+): {trace_b} ({len(right)} steps)")
+    ops = align(left, right, threshold)
+    for line in render_alignment(ops):
+        style = {"-": "red", "+": "green", "≈": "yellow"}.get(line.lstrip()[:1], "dim")
+        console.print(f"[{style}]{line}[/{style}]", highlight=False)
+    matched = sum(1 for op in ops if op.op == "match")
+    console.print(f"\n{matched} matched · {len(left) - matched} only in A "
+                  f"· {len(right) - matched} only in B")
 
 
 if __name__ == "__main__":
