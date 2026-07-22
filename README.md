@@ -14,6 +14,54 @@ Roadmap:
 - [ ] Record rate-limit events into run metrics
 - [ ] HTML report with embedded trace viewer
 
+## Demo
+
+`tasks/fix-median-bug.yaml` plants two bugs in a small `stats.py` (a crash on empty input and an off-by-one in the median) plus a test suite that catches them. The agent is asked to make the tests pass; a checksum assertion guards against the agent "fixing" the tests instead. Three parallel recorded runs:
+
+```
+$ flightrec run tasks/fix-median-bug.yaml -n 3
+
+                  fix-median-bug: 3/3 passed
+┏━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┓
+┃ run      ┃ status ┃ turns ┃ tool calls ┃ duration ┃ cost    ┃
+┡━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━┩
+│ 96cdc84a │ PASS   │ 6     │ 5          │ 13.6s    │ $0.0983 │
+│ bcb670e5 │ PASS   │ 6     │ 5          │ 13.8s    │ $0.0973 │
+│ ddc8c5e4 │ PASS   │ 5     │ 4          │ 20.0s    │ $0.0871 │
+└──────────┴────────┴───────┴────────────┴──────────┴─────────┘
+  pass rate 100%  ·  duration 15.8s ±3.6s  ·  cost per success $0.0942
+```
+
+Same prompt, same sandbox image – yet run `ddc8c5e4` took a different path than `96cdc84a`. The aligned trajectory diff shows exactly how they differed (`=` matched, `≈` same action with cosmetic differences, `-`/`+` only in one run):
+
+```
+$ flightrec diff runs/fix-median-bug/96cdc84a/trace.jsonl runs/fix-median-bug/ddc8c5e4/trace.jsonl
+
+ ≈ Bash({"command": "ls -la && python3 test_stats.py 2>&1 | head -60"})  [98% similar]
+ = Read({"file_path": "/home/user/workspace/stats.py"})
+ - Edit({"file_path": "stats.py", "new_string": "def mean(values):\n    if not values:…
+ - Edit({"file_path": "stats.py", "new_string": "    return (ordered[mid - 1] + ordered[mid]) / 2…
+ + Edit({"file_path": "stats.py", "new_string": "def mean(values):\n    if not values:…
+ ≈ Bash({"command": "python3 test_stats.py"})  [94% similar]
+
+3 matched · 2 only in A · 1 only in B
+```
+
+One run fixed the two bugs with two separate edits, the other with a single combined edit. On a trivial task this is a curiosity; on a production agent, the same view shows you the exact step where failing runs leave the happy path.
+
+And the same task under two models – reliability vs cost, measured instead of guessed:
+
+```
+$ flightrec compare tasks/fix-median-bug.yaml -m sonnet -m haiku -n 3
+
+┏━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ model  ┃ pass rate  ┃ flaky ┃ duration    ┃ tool calls ┃ cost per success ┃
+┡━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ sonnet │ 3/3 (100%) │ no    │ 14.0s ±3.0s │ 5.0        │ $0.0909          │
+│ haiku  │ 3/3 (100%) │ no    │ 23.0s ±1.5s │ 6.7        │ $0.0381          │
+└────────┴────────────┴───────┴─────────────┴────────────┴──────────────────┘
+```
+
 ## How it works
 
 1. You define a task in YAML: a prompt plus assertions (what "success" means).
